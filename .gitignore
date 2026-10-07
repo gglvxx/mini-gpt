@@ -1,0 +1,17 @@
+# Mediul virtual
+.venv/
+
+# Cache Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Date și modele (prea mari pentru GitHub)
+data/*
+!data/.gitkeep
+checkpoints/*
+!checkpoints/.gitkeep
+
+# Setări locale editor / sistem
+.vscode/
+.DS_Store
