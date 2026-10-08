@@ -15,3 +15,4 @@ checkpoints/*
 # Setări locale editor / sistem
 .vscode/
 .DS_Store
+*.log
