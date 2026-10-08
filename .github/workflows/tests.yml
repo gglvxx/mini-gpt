@@ -1,0 +1,34 @@
+# Rulează automat testele la fiecare push pe main și la fiecare pull request
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest  # un Linux curat, pornit de GitHub la fiecare rulare
+
+    steps:
+      # Descarcă codul din repo pe server
+      - uses: actions/checkout@v4
+
+      # Instalează Python; cache: pip -> rulările următoare sunt mai rapide
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # Varianta CPU a PyTorch (serverele GitHub nu au GPU), apoi restul dependințelor
+      - name: Install dependencies
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+
+      # Fără dataset, testele care depind de el ar fi sărite (skipped)
+      - name: Download dataset
+        run: python prepare_data.py
+
+      - name: Run tests
+        run: pytest -v

@@ -77,6 +77,10 @@ class Config:
     def checkpoint_path(self) -> Path:
         return self.checkpoint_dir / "model.pt"
 
+    @property
+    def history_path(self) -> Path:
+        return self.checkpoint_dir / "history.json"
+
 
 # Instanța globală: în restul proiectului facem doar `from src.config import config`
 config = Config()

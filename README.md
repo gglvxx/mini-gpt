@@ -3,6 +3,7 @@
 A character-level GPT language model built from scratch in PyTorch.
 It is trained on Shakespeare's works and generates new text in the same style.
 
+![Tests](https://github.com/gglvxx/mini-gpt/actions/workflows/tests.yml/badge.svg)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -13,6 +14,7 @@ It is trained on Shakespeare's works and generates new text in the same style.
 - **Character-level tokenizer** with encode/decode roundtrip
 - **Hardware-aware config**: automatically uses a larger model when a CUDA GPU is available
 - **Training loop** with train/val evaluation, gradient clipping and best-checkpoint saving
+- **Loss tracking** with an automatically generated training curve
 - **Streaming text generation** with temperature and top-k sampling
 - **Unit tests** for the tokenizer, dataset and model (including a causal-mask test)
 
@@ -44,11 +46,14 @@ mini-gpt/
 │   ├── dataset.py       # Train/val split and batching
 │   └── model.py         # Transformer architecture
 ├── tests/               # Unit tests (pytest)
+├── assets/              # Images used in this README
 ├── data/                # Dataset (downloaded, not tracked)
-├── checkpoints/         # Trained models (not tracked)
+├── checkpoints/         # Trained models and loss history (not tracked)
 ├── prepare_data.py      # Downloads the dataset
 ├── train.py             # Trains the model
 ├── generate.py          # Generates text
+├── plot_loss.py         # Plots the training curve
+├── pytest.ini
 └── requirements.txt
 ```
 
@@ -78,11 +83,14 @@ python prepare_data.py
 python train.py                    # full training
 python train.py --max-iters 300    # quick test run
 
-# 3. Generate text
+# 3. Plot the loss curve
+python plot_loss.py
+
+# 4. Generate text
 python generate.py --prompt "ROMEO:" --tokens 300
 python generate.py --temperature 0.5 --top-k 20 --seed 42
 
-# 4. Run tests
+# 5. Run tests
 pytest -v
 ```
 
@@ -92,6 +100,4 @@ pytest -v
 |---|---|---|
 | `--prompt` | `\n` | Starting text |
 | `--tokens` | `500` | Number of characters to generate |
-| `--temperature` | `0.8` | Lower = safer, higher = more creative |
-| `--top-k` | `40` | Sample only from the K most likely characters |
-| `--seed` | none |
+| `--temperature` | `0.8` | Lower = safer, higher = more
