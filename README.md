@@ -15,8 +15,9 @@ It is trained on Shakespeare's works and generates new text in the same style.
 - **Hardware-aware config**: automatically uses a larger model when a CUDA GPU is available
 - **Training loop** with train/val evaluation, gradient clipping and best-checkpoint saving
 - **Loss tracking** with an automatically generated training curve
-- **Streaming text generation** with temperature and top-k sampling
-- **Unit tests** for the tokenizer, dataset and model (including a causal-mask test)
+- **Streaming text generation** with temperature and top-k sampling, from the CLI or a web interface
+- **Web demo** built with Gradio
+- **Unit tests** for the tokenizer, dataset and model (including a causal-mask test), run automatically with GitHub Actions
 
 ## Architecture
 
@@ -40,6 +41,7 @@ Final LayerNorm → Linear → Logits (next-character probabilities)
 
 ```
 mini-gpt/
+├── .github/workflows/   # CI: runs the tests on every push
 ├── src/
 │   ├── config.py        # Hyperparameters and paths
 │   ├── tokenizer.py     # Character-level tokenizer
@@ -51,7 +53,8 @@ mini-gpt/
 ├── checkpoints/         # Trained models and loss history (not tracked)
 ├── prepare_data.py      # Downloads the dataset
 ├── train.py             # Trains the model
-├── generate.py          # Generates text
+├── generate.py          # Generates text from the command line
+├── app.py               # Web interface (Gradio)
 ├── plot_loss.py         # Plots the training curve
 ├── pytest.ini
 └── requirements.txt
@@ -86,11 +89,14 @@ python train.py --max-iters 300    # quick test run
 # 3. Plot the loss curve
 python plot_loss.py
 
-# 4. Generate text
+# 4. Generate text from the command line
 python generate.py --prompt "ROMEO:" --tokens 300
 python generate.py --temperature 0.5 --top-k 20 --seed 42
 
-# 5. Run tests
+# 5. Launch the web interface
+python app.py
+
+# 6. Run tests
 pytest -v
 ```
 
@@ -100,4 +106,62 @@ pytest -v
 |---|---|---|
 | `--prompt` | `\n` | Starting text |
 | `--tokens` | `500` | Number of characters to generate |
-| `--temperature` | `0.8` | Lower = safer, higher = more
+| `--temperature` | `0.8` | Lower = safer, higher = more creative |
+| `--top-k` | `40` | Sample only from the K most likely characters |
+| `--seed` | none | Fixed seed for reproducible output |
+
+## Web Demo
+
+An interactive web interface built with Gradio, with live streaming generation.
+
+```bash
+python app.py
+# then open http://127.0.0.1:7860
+```
+
+![Web demo](assets/demo.png)
+
+## Results
+
+| Setting | Value |
+|---|---|
+| Hardware | CPU (Intel, Lenovo IdeaPad Slim 3) |
+| Parameters | 0.82M |
+| Layers / Heads / Embedding | 4 / 4 / 128 |
+| Context length | 128 characters |
+| Training steps | 3,000 |
+| Training time | ~X min |
+| **Validation loss** | **1.597** (random baseline: 4.17) |
+
+![Loss curve](assets/loss_curve.png)
+
+### Sample output
+
+```
+PASTE YOUR GENERATED TEXT HERE
+```
+
+The model learns the **form** of the text (dialogue format, character names, spelling and punctuation), not its meaning. This is expected at this scale.
+
+## Experiments
+
+| Change | Best val loss | Kept? |
+|---|---|---|
+| Baseline (constant LR 1e-3) | **1.597** | ✅ |
+| Cosine LR schedule with warmup (peak 1e-3) | 1.609 | ❌ |
+
+With only 3,000 steps the model is still underfitting, so decaying the learning rate slowed learning down instead of helping.
+
+## Configuration
+
+All hyperparameters live in [`src/config.py`](src/config.py). A small preset is used on CPU, and a larger one (10.8M parameters, 6 layers, 384 embedding) is applied automatically when CUDA is available.
+
+## Acknowledgements
+
+- [Attention Is All You Need](https://arxiv.org/abs/1706.03762) (Vaswani et al., 2017)
+- Andrej Karpathy's [nanoGPT](https://github.com/karpathy/nanoGPT) and the *Let's build GPT* lecture
+- Dataset: [Tiny Shakespeare](https://github.com/karpathy/char-rnn)
+
+## License
+
+[MIT](LICENSE)

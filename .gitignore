@@ -16,3 +16,4 @@ checkpoints/*
 .vscode/
 .DS_Store
 *.log
+.gradio/

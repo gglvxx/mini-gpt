@@ -4,3 +4,5 @@ tqdm
 requests
 pytest
 matplotlib
+gradio
+gradio
