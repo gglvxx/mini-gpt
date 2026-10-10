@@ -3,6 +3,9 @@
 A character-level GPT language model built from scratch in PyTorch.
 It is trained on Shakespeare's works and generates new text in the same style.
 
+**▶ Try it online: [gglvxx.github.io/mini-gpt](https://gglvxx.github.io/mini-gpt/)** (runs entirely in your browser)
+
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-5b4bdb)](https://gglvxx.github.io/mini-gpt/)
 ![Tests](https://github.com/gglvxx/mini-gpt/actions/workflows/tests.yml/badge.svg)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c)
@@ -15,8 +18,9 @@ It is trained on Shakespeare's works and generates new text in the same style.
 - **Hardware-aware config**: automatically uses a larger model when a CUDA GPU is available
 - **Training loop** with train/val evaluation, gradient clipping and best-checkpoint saving
 - **Loss tracking** with an automatically generated training curve
-- **Streaming text generation** with temperature and top-k sampling, from the CLI or a web interface
-- **Web demo** built with Gradio
+- **Streaming text generation** with temperature and top-k sampling
+- **In-browser inference**: the model is exported to ONNX and runs client-side with ONNX Runtime Web, hosted for free on GitHub Pages, no server needed
+- **Local web app** built with Gradio
 - **Unit tests** for the tokenizer, dataset and model (including a causal-mask test), run automatically with GitHub Actions
 
 ## Architecture
@@ -48,13 +52,15 @@ mini-gpt/
 │   ├── dataset.py       # Train/val split and batching
 │   └── model.py         # Transformer architecture
 ├── tests/               # Unit tests (pytest)
+├── docs/                # In-browser demo served by GitHub Pages (HTML + ONNX model)
 ├── assets/              # Images used in this README
 ├── data/                # Dataset (downloaded, not tracked)
 ├── checkpoints/         # Trained models and loss history (not tracked)
 ├── prepare_data.py      # Downloads the dataset
 ├── train.py             # Trains the model
 ├── generate.py          # Generates text from the command line
-├── app.py               # Web interface (Gradio)
+├── export_onnx.py       # Exports the model to ONNX for the browser demo
+├── app.py               # Local web interface (Gradio)
 ├── plot_loss.py         # Plots the training curve
 ├── pytest.ini
 └── requirements.txt
@@ -93,10 +99,14 @@ python plot_loss.py
 python generate.py --prompt "ROMEO:" --tokens 300
 python generate.py --temperature 0.5 --top-k 20 --seed 42
 
-# 5. Launch the web interface
+# 5. Launch the local web interface
 python app.py
 
-# 6. Run tests
+# 6. Export the model for the browser demo, then preview it locally
+python export_onnx.py
+python -m http.server 8000 --directory docs   # open http://localhost:8000
+
+# 7. Run tests
 pytest -v
 ```
 
@@ -112,7 +122,15 @@ pytest -v
 
 ## Web Demo
 
-An interactive web interface built with Gradio, with live streaming generation.
+### In-browser (online)
+
+**[gglvxx.github.io/mini-gpt](https://gglvxx.github.io/mini-gpt/)**
+
+The trained model is exported to ONNX (`export_onnx.py`) and executed directly in the visitor's browser with ONNX Runtime Web. Sampling (temperature, top-k) is reimplemented in JavaScript. No backend, no GPU, no cost.
+
+To keep the export simple and robust, the model uses a fixed input shape of `[1, 128]`: shorter prompts are right-padded, and the causal mask guarantees the padding never affects the predictions.
+
+### Gradio (local)
 
 ```bash
 python app.py
@@ -161,6 +179,7 @@ All hyperparameters live in [`src/config.py`](src/config.py). A small preset is 
 - [Attention Is All You Need](https://arxiv.org/abs/1706.03762) (Vaswani et al., 2017)
 - Andrej Karpathy's [nanoGPT](https://github.com/karpathy/nanoGPT) and the *Let's build GPT* lecture
 - Dataset: [Tiny Shakespeare](https://github.com/karpathy/char-rnn)
+- [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) for in-browser inference
 
 ## License
 
