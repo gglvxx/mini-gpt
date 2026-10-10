@@ -6,3 +6,6 @@ pytest
 matplotlib
 gradio
 gradio
+onnx
+onnxscript
+onnxruntime
