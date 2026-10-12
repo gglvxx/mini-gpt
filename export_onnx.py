@@ -19,8 +19,8 @@ DEMO_INFO = {
     },
     "romanian": {
         "label": "Română",
-        "description": "Eminescu, Caragiale, Slavici (Project Gutenberg, public domain)",
-        "examples": ["A fost odată", "Luceafărul", "Și era"],
+        "description": "Caragiale, Slavici, Queen Marie (Project Gutenberg, public domain)",
+        "examples": ["A fost odată", "Era un om", "Și era"],
     },
 }
 

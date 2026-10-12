@@ -1,5 +1,5 @@
 """Teste pentru curățarea textelor. Rulează cu: pytest"""
-from src.cleaning import clean_gutenberg_text, remove_rare_chars
+from src.cleaning import clean_gutenberg_text, diacritic_ratio, remove_rare_chars
 
 
 def test_cedilla_diacritics_are_normalized():
@@ -25,7 +25,23 @@ def test_extra_blank_lines_are_collapsed():
     assert clean_gutenberg_text("a\n\n\n\n\nb") == "a\n\nb\n"
 
 
-def test_rare_chars_are_removed():
+def test_punctuation_variants_are_unified():
+    assert clean_gutenberg_text("s’au „bine” — da") == "s'au \"bine\" – da\n"
+
+
+def test_rare_symbols_are_removed():
     text, removed = remove_rare_chars("aaaa§", min_count=2)
     assert text == "aaaa"
     assert removed == {"§"}
+
+
+def test_rare_letters_are_never_removed():
+    text, removed = remove_rare_chars("aaaaĂKX", min_count=2)
+    assert text == "aaaaĂKX"
+    assert removed == set()
+
+
+def test_diacritic_ratio():
+    assert diacritic_ratio("Imbraca-te in doliu, frumoasa Bucovina") == 0.0
+    assert diacritic_ratio("Îmbracă-te în doliu") > 0.1
+    assert diacritic_ratio("") == 0.0

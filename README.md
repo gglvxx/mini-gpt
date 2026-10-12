@@ -1,6 +1,6 @@
 # Mini-GPT
 
-A character-level GPT language model built from scratch in PyTorch, trained on two corpora: **Shakespeare** and **classic Romanian literature** (Eminescu, Caragiale, Slavici).
+A character-level GPT language model built from scratch in PyTorch, trained on two corpora: **Shakespeare** and **classic Romanian prose** (Caragiale, Slavici, Queen Marie).
 
 **▶ Try it online: [gglvxx.github.io/mini-gpt](https://gglvxx.github.io/mini-gpt/)** (runs entirely in your browser, in English and Romanian)
 
@@ -12,7 +12,7 @@ A character-level GPT language model built from scratch in PyTorch, trained on t
 
 ## How it works (in plain English)
 
-**Mini-GPT is a program that taught itself to write in the style of the texts it read, one letter at a time.** Nobody explained grammar or what a play or a poem looks like. It figured everything out from examples. One model learned from Shakespeare, a second one from classic Romanian writers.
+**Mini-GPT is a program that taught itself to write in the style of the texts it read, one letter at a time.** Nobody explained grammar or what a play or a story looks like. It figured everything out from examples. One model learned from Shakespeare, a second one from classic Romanian writers.
 
 **What it does.** Think of the word suggestions on your phone keyboard, but at the level of single letters, in a loop:
 
@@ -21,21 +21,22 @@ A character-level GPT language model built from scratch in PyTorch, trained on t
 3. It adds that letter to the text and guesses again
 4. Repeated a few hundred times, this produces a full passage
 
-**How it learned.** It read about a million characters of text and played one game thousands of times: *"I hide the next letter, you guess it."* After every mistake, it slightly adjusted its 820,000 internal numbers (parameters). At first it guessed completely at random. By the end, instead of hesitating between all possible characters, it hesitates between only a handful on average.
+**How it learned.** It read hundreds of thousands of characters of text and played one game thousands of times: *"I hide the next letter, you guess it."* After every mistake, it slightly adjusted its 830,000 internal numbers (parameters). At first it guessed completely at random. By the end, instead of hesitating between all possible characters, it hesitates between only a handful on average.
 
 **What it knows, and what it doesn't.**
-- ✅ **Form:** dialogue layout, verse lines, real words, punctuation, Romanian diacritics
+- ✅ **Form:** dialogue layout, real words, punctuation, Romanian diacritics, even 19th-century spelling
 - ❌ **Meaning:** the sentences don't make sense. Like a parrot that has listened to thousands of books, it imitates the sound perfectly without understanding the story.
 
-**How it relates to ChatGPT.** It uses the same core technology, the **Transformer** architecture, and the same principle: *predict the next piece of text*. The difference is scale: this model has 0.82 million parameters and was trained on about 1 MB of text, while large models like GPT-3 have 175 billion parameters, read a large part of the internet, and receive extra training to hold conversations.
+**How it relates to ChatGPT.** It uses the same core technology, the **Transformer** architecture, and the same principle: *predict the next piece of text*. The difference is scale: this model has under one million parameters and was trained on about 1 MB of text, while large models like GPT-3 have 175 billion parameters, read a large part of the internet, and receive extra training to hold conversations.
 
 **Try it yourself.** Open the [live demo](https://gglvxx.github.io/mini-gpt/), pick **Shakespeare** or **Română**, and press **Generate**. Keep in mind it is not a chatbot: if you ask a question, it won't answer it, it will simply continue the text.
 
 ## Features
 
 - **Decoder-only Transformer** implemented from scratch: causal multi-head self-attention, feed-forward layers, residual connections, LayerNorm
-- **Two datasets**: Tiny Shakespeare and a custom Romanian literature corpus, selected with one environment variable
-- **Text cleaning pipeline** for raw Project Gutenberg sources: boilerplate removal, diacritics normalization, footnote and markup stripping, rare-character filtering
+- **Two datasets**: Tiny Shakespeare and a custom Romanian prose corpus, selected with one environment variable
+- **Data-quality pipeline** for raw Project Gutenberg sources: boilerplate removal, diacritics and punctuation normalization, automatic rejection of books transcribed without diacritics, rare-symbol filtering
+- **Robust data download** with retries and a local cache
 - **Character-level tokenizer** with encode/decode roundtrip
 - **Hardware-aware config**: automatically uses a larger model when a CUDA GPU is available
 - **Training loop** with train/val evaluation, gradient clipping and best-checkpoint saving
@@ -47,22 +48,25 @@ A character-level GPT language model built from scratch in PyTorch, trained on t
 
 ## Datasets
 
-| | Shakespeare | Romanian literature |
+| | Shakespeare | Romanian prose |
 |---|---|---|
 | Source | [Tiny Shakespeare](https://github.com/karpathy/char-rnn) | [Project Gutenberg](https://www.gutenberg.org/browse/languages/ro) (public domain) |
-| Content | Plays | Eminescu *Poezii*, Caragiale *Nuvele*, Slavici *Povești* |
-| Size | 1,115,394 characters | 1,368,843 characters |
-| Vocabulary | 65 characters | 90 characters |
+| Content | Plays | Caragiale *Nuvele*, Slavici *Povești*, Queen Marie *Țara mea* (transl. N. Iorga) |
+| Size | 1,115,394 characters | 740,152 characters |
+| Vocabulary | 65 characters | 77 characters |
 
-### Cleaning the Romanian corpus
+### Building a clean Romanian corpus
 
-Raw Gutenberg files are not usable as-is. [`src/cleaning.py`](src/cleaning.py) applies:
+Raw Gutenberg files are not usable as-is. [`prepare_data.py`](prepare_data.py) and [`src/cleaning.py`](src/cleaning.py) apply:
 
-1. **Boilerplate removal**: strips the Project Gutenberg license header and footer, keeping only the literary text
-2. **Diacritics normalization**: old texts often use the incorrect cedilla forms `ş ţ`; they are converted to the correct comma-below forms `ș ț`, so the model does not learn two different letters for the same sound
-3. **Markup stripping**: removes `_italic_` markers, `[Illustration]` tags and footnote references like `[12]`
-4. **Whitespace normalization**: Windows line endings, trailing spaces, repeated blank lines
-5. **Rare-character filtering**: drops characters seen fewer than 20 times, which the model cannot learn and which only inflate the vocabulary
+1. **Boilerplate removal**: strips the Project Gutenberg license header and footer
+2. **Diacritics normalization**: the incorrect cedilla forms `ş ţ` become the correct comma-below forms `ș ț`, so the model does not learn two letters for the same sound
+3. **Punctuation normalization**: typographic variants (`’ ‘ „ ” « » —`) are unified, since they carry no information about the content
+4. **Markup stripping**: `_italic_` markers, `[Illustration]` tags, footnote references like `[12]`
+5. **Book-level diacritics check**: Romanian prose has about 10% of letters with diacritics; a book below 1% was transcribed without them and is **rejected automatically**
+6. **Rare-symbol filtering**: symbols seen fewer than 20 times are dropped; letters are never removed, since that would corrupt words
+
+**Data-quality finding.** The first version of the corpus included Eminescu's *Poezii*. Inspecting the cleaned data revealed that this Gutenberg transcription has **0.00% diacritics** (`Imbraca-te in doliu` instead of `Îmbracă-te în doliu`), which taught the model that diacritics are optional. A first fix filtered individual paragraphs, but it removed long poems while keeping short stanzas, making things worse. The final fix checks whole books, and Eminescu is now excluded automatically.
 
 Each step is covered by unit tests in [`tests/test_cleaning.py`](tests/test_cleaning.py).
 
@@ -91,7 +95,7 @@ mini-gpt/
 ├── .github/workflows/   # CI: runs the tests on every push
 ├── src/
 │   ├── config.py        # Hyperparameters, paths and dataset selection
-│   ├── cleaning.py      # Text cleaning for Project Gutenberg sources
+│   ├── cleaning.py      # Text cleaning and data-quality checks
 │   ├── tokenizer.py     # Character-level tokenizer
 │   ├── dataset.py       # Train/val split and batching
 │   └── model.py         # Transformer architecture
@@ -99,7 +103,7 @@ mini-gpt/
 ├── docs/                # In-browser demo served by GitHub Pages
 │   └── models/          # One ONNX model + metadata per dataset
 ├── assets/              # Images used in this README
-├── data/                # Datasets (downloaded, not tracked)
+├── data/                # Datasets and raw download cache (not tracked)
 ├── checkpoints/         # One folder per dataset: model + loss history (not tracked)
 ├── prepare_data.py      # Downloads and cleans a dataset
 ├── train.py             # Trains the model
@@ -192,18 +196,19 @@ python app.py
 
 Same architecture and hyperparameters for both datasets, trained on CPU (Intel, Lenovo IdeaPad Slim 3).
 
-| | Shakespeare | Romanian literature |
+| | Shakespeare | Romanian prose |
 |---|---|---|
-| Parameters | 0.82M | 0.82M |
+| Parameters | 0.82M | 0.83M |
 | Layers / Heads / Embedding | 4 / 4 / 128 | 4 / 4 / 128 |
 | Context length | 128 characters | 128 characters |
 | Training steps | 3,000 | 3,000 |
-| Random-guess baseline | 4.17 | 4.50 |
-| **Validation loss** | **1.597** | **1.811** |
+| Random-guess baseline | 4.17 | 4.34 |
+| **Validation loss** | **1.597** | **1.640** |
+| Reduction vs. baseline | 61.7% | 62.2% |
 
-Validation losses are **not directly comparable** across datasets: the languages, vocabularies and writing styles differ. Each model should be judged against its own random-guess baseline.
+Validation losses are **not directly comparable** across datasets: the languages, vocabularies and writing styles differ. Each model is judged against its own random-guess baseline. Neither model shows overfitting: validation loss decreased at every evaluation.
 
-| Shakespeare | Romanian literature |
+| Shakespeare | Romanian prose |
 |---|---|
 | ![Loss curve Shakespeare](assets/loss_curve.png) | ![Loss curve Romanian](assets/loss_curve_romanian.png) |
 
@@ -222,28 +227,29 @@ And so he said yet us a passion's life was came
 Them between hang were could to sounder I speak and my
 ```
 
-**Romanian literature** (prompt `A fost odată`, seed 42):
+**Romanian prose** (prompt `A fost odată`, seed 42):
 
 ```
-A fost odată, că s’au curgeaua săută d’l de dorminte am a venițofat cu unde
-cel de breu se duce să răspunse și pe unde aflorilor…
-
-– L’a încunoastea său foc pe pe cuțită In mijlocata!…
-
-– Nu să fie nimic sarfește de prefecioară, cum că alta nu stau în puternicită si
-curtească: încet bunetelele într’un tărăt alt
+A fost odată, că el un mahar în codr lume.
+La puțin nu se putù de curtea și plecà cât o străbușă cu capul lor se
+întindă grădit, voiu mai că numai cum căci o cercetătie
+copil și puțin sufletat între de mânătoare se așeză de fecii de macării
+în curătă, dar până cea strânsă mie, când acuma de mică, când am vădut
 ```
 
-Both models learn the **form** of the text (dialogue layout, verse, spelling, punctuation, diacritics), not its meaning. This is expected at this scale.
+Both models learn the **form** of the text (dialogue layout, spelling, punctuation, diacritics), not its meaning. The Romanian model even reproduces the 19th-century spelling of its sources (`plecà`, `putù`, `voiu`). This is expected at this scale.
 
 ## Experiments
 
-| Change | Best val loss (Shakespeare) | Kept? |
-|---|---|---|
-| Baseline (constant LR 1e-3) | **1.597** | ✅ |
-| Cosine LR schedule with warmup (peak 1e-3) | 1.609 | ❌ |
+| Dataset | Change | Vocab | Best val loss | Reduction vs. baseline | Kept? |
+|---|---|---|---|---|---|
+| Shakespeare | Baseline (constant LR 1e-3) | 65 | **1.597** | 61.7% | ✅ |
+| Shakespeare | Cosine LR schedule with warmup (peak 1e-3) | 65 | 1.609 | 61.5% | ❌ |
+| Romanian | v1: Eminescu + Caragiale + Slavici, basic cleaning | 90 | 1.811 | 59.8% | ❌ |
+| Romanian | v2: data-quality pipeline (see above) | 77 | **1.640** | 62.2% | ✅ |
 
-With only 3,000 steps the model is still underfitting, so decaying the learning rate slowed learning down instead of helping.
+- **Learning-rate schedule:** with only 3,000 steps the model is still underfitting, so decaying the learning rate slowed learning down instead of helping.
+- **Romanian v1 vs. v2:** the two validation losses are measured on different data, so they are not strictly comparable. v2 was kept because of **data quality**: consistent spelling with diacritics, confirmed by the generated samples. Its reduction relative to the random baseline is also higher.
 
 ## Configuration
 
