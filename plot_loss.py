@@ -9,7 +9,9 @@ import matplotlib.pyplot as plt
 
 from src.config import ROOT_DIR, config
 
-OUTPUT_PATH = ROOT_DIR / "assets" / "loss_curve.png"
+# Shakespeare păstrează numele original (folosit în README); celelalte primesc sufix
+FILE_NAME = "loss_curve.png" if config.dataset == "shakespeare" else f"loss_curve_{config.dataset}.png"
+OUTPUT_PATH = ROOT_DIR / "assets" / FILE_NAME
 
 
 def main():
@@ -38,7 +40,7 @@ def main():
                 xytext=(0, 25), textcoords="offset points", ha="center",
                 arrowprops=dict(arrowstyle="->"))
 
-    ax.set_title("Mini-GPT training on Tiny Shakespeare")
+    ax.set_title(f"Mini-GPT training on the '{config.dataset}' dataset")
     ax.set_xlabel("Training step")
     ax.set_ylabel("Cross-entropy loss")
     ax.grid(alpha=0.3)

@@ -1,12 +1,15 @@
 """Configurație centrală: toți hiperparametrii proiectului într-un singur loc."""
+import os  # NOU
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import torch
 
 # Folderul rădăcină al proiectului (mini-gpt/), calculat relativ la acest fișier.
-# Așa căile funcționează indiferent din ce folder rulezi scripturile.
 ROOT_DIR = Path(__file__).resolve().parent.parent
+
+# NOU: dataset-urile suportate
+DATASETS = ("shakespeare", "romanian")
 
 
 def get_device() -> str:
@@ -14,6 +17,12 @@ def get_device() -> str:
     if torch.cuda.is_available():
         return "cuda"  # GPU NVIDIA
     return "cpu"
+
+
+def get_dataset() -> str:  # NOU
+    """Dataset-ul se alege din terminal: MINIGPT_DATASET=romanian python train.py
+    Fără variabila setată, se folosește Shakespeare."""
+    return os.environ.get("MINIGPT_DATASET", "shakespeare")
 
 
 # Setări mai mari, folosite automat doar dacă există GPU
@@ -35,15 +44,10 @@ class Config:
     device: str = field(default_factory=get_device)
     seed: int = 1337  # fixează randomness-ul -> rezultate reproductibile
 
-    # --- Căi (paths) ---
+    # --- Date ---
+    dataset: str = field(default_factory=get_dataset)  # NOU
     data_dir: Path = ROOT_DIR / "data"
     checkpoint_dir: Path = ROOT_DIR / "checkpoints"
-    dataset_url: str = (
-        "https://raw.githubusercontent.com/karpathy/char-rnn/master/"
-        "data/tinyshakespeare/input.txt"
-    )
-
-    # --- Date ---
     train_split: float = 0.9  # 90% pentru antrenare, 10% pentru validare
 
     # --- Model (valorile implicite = preset mic, potrivit pentru CPU) ---
@@ -61,6 +65,10 @@ class Config:
     eval_iters: int = 100         # pe câte batch-uri facem media la evaluare
 
     def __post_init__(self):
+        # NOU: oprește imediat dacă numele dataset-ului e greșit (ex: o greșeală de tastare)
+        if self.dataset not in DATASETS:
+            raise ValueError(f"Dataset necunoscut: '{self.dataset}'. Opțiuni: {DATASETS}")
+
         # Dacă avem GPU, suprascriem cu preset-ul mare
         if self.device == "cuda":
             for key, value in GPU_PRESET.items():
@@ -69,17 +77,22 @@ class Config:
         # Fiecare cap de atenție primește o felie egală din n_embd
         assert self.n_embd % self.n_head == 0, "n_embd trebuie să fie divizibil cu n_head"
 
+    # NOU: fiecare dataset are fișierul și checkpoint-urile lui, separat
     @property
     def data_path(self) -> Path:
-        return self.data_dir / "input.txt"
+        return self.data_dir / f"{self.dataset}.txt"
+
+    @property
+    def run_dir(self) -> Path:
+        return self.checkpoint_dir / self.dataset
 
     @property
     def checkpoint_path(self) -> Path:
-        return self.checkpoint_dir / "model.pt"
+        return self.run_dir / "model.pt"
 
     @property
     def history_path(self) -> Path:
-        return self.checkpoint_dir / "history.json"
+        return self.run_dir / "history.json"
 
 
 # Instanța globală: în restul proiectului facem doar `from src.config import config`
