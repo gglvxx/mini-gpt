@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mini-GPT · In-browser demo</title>
 <style>
-  /* Culori definite o singură dată; varianta dark se aplică automat după setarea sistemului */
   :root {
     --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1f; --muted: #6b6b70;
     --border: #e2e2e0; --accent: #5b4bdb; --accent-text: #ffffff; --error: #c0392b;
@@ -24,19 +23,24 @@
   header p { margin: 0; color: var(--muted); }
   #status { margin-top: 12px; font-size: .9rem; color: var(--muted); }
   .grid { display: grid; grid-template-columns: 320px 1fr; gap: 20px; margin-top: 24px; }
-  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }  /* pe telefon: o coloană */
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
   .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
   label { display: block; font-size: .85rem; font-weight: 600; margin: 14px 0 6px; }
   label span { float: right; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .panel > label:first-child { margin-top: 0; }
   textarea, input[type=number] { width: 100%; padding: 8px 10px; border: 1px solid var(--border);
          border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
   input[type=range] { width: 100%; accent-color: var(--accent); }
-  .buttons { display: flex; gap: 8px; margin-top: 18px; }
   button { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border);
            background: var(--panel); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
   button:disabled { opacity: .5; cursor: not-allowed; }
+  /* Selectorul de dataset: butoane lipite, cel activ colorat */
+  .tabs { display: flex; gap: 4px; padding: 4px; margin-bottom: 4px; background: var(--bg);
+          border: 1px solid var(--border); border-radius: 10px; }
+  .tabs[hidden] { display: none; }
+  .tabs button { padding: 6px 10px; border: none; background: transparent; }
+  .tabs button.active { background: var(--accent); color: var(--accent-text); }
+  .buttons { display: flex; gap: 8px; margin-top: 18px; }
   .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
   .examples button { flex: none; padding: 4px 10px; font-size: .8rem; font-weight: 500; }
   #output { margin: 0; min-height: 420px; white-space: pre-wrap; font-size: .9rem;
@@ -50,14 +54,16 @@
 <div class="wrap">
   <header>
     <h1>Mini-GPT</h1>
-    <p>A character-level Transformer trained from scratch on Shakespeare. It runs entirely in your browser, no server involved.</p>
-    <div id="status">Loading model…</div>
+    <p>Character-level Transformers trained from scratch. They run entirely in your browser, no server involved.</p>
+    <div id="status">Loading…</div>
   </header>
 
   <div class="grid">
     <div class="panel">
+      <div class="tabs" id="tabs" hidden></div>
+
       <label for="prompt">Prompt</label>
-      <textarea id="prompt" rows="2">ROMEO:</textarea>
+      <textarea id="prompt" rows="2"></textarea>
 
       <label for="tokens">Characters <span id="tokens-val">300</span></label>
       <input type="range" id="tokens" min="50" max="1000" step="50" value="300">
@@ -76,11 +82,7 @@
         <button id="stop" disabled>Stop</button>
       </div>
 
-      <div class="examples">
-        <button data-prompt="ROMEO:">ROMEO:</button>
-        <button data-prompt="KING HENRY:">KING HENRY:</button>
-        <button data-prompt="First Citizen:">First Citizen:</button>
-      </div>
+      <div class="examples" id="examples"></div>
     </div>
 
     <div class="panel"><pre id="output"></pre></div>
@@ -93,22 +95,24 @@
 
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1/dist/ort.min.js"></script>
 <script>
-// Fișierele WebAssembly ale ONNX Runtime se iau de pe același CDN.
-// Un singur thread: GitHub Pages nu permite setările de securitate necesare pentru multi-threading.
 ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1/dist/";
 ort.env.wasm.numThreads = 1;
 
+// Ordinea taburilor. Un dataset fără model exportat e ignorat automat.
+const DATASETS = ["shakespeare", "romanian"];
+
 const $ = (id) => document.getElementById(id);
-let session, meta, stoi;
+const metas = {};     // dataset -> meta.json (citite la pornire, sunt mici)
+const sessions = {};  // dataset -> model ONNX (descărcat doar când dataset-ul e selectat)
+let current = null;   // dataset-ul activ: { name, meta, session, stoi }
+let running = false;
 let stopRequested = false;
 
-// Afișează valoarea curentă lângă fiecare slider
 for (const id of ["tokens", "temperature", "topk"]) {
   $(id).addEventListener("input", () => ($(id + "-val").textContent = $(id).value));
 }
 
-// Generator aleatoriu cu seed (Math.random nu acceptă seed).
-// Notă: textul va diferi de cel din Python la același seed, generatoarele sunt diferite.
+// Generator aleatoriu cu seed (Math.random nu acceptă seed)
 function mulberry32(seed) {
   return function () {
     seed = (seed + 0x6d2b79f5) | 0;
@@ -121,9 +125,8 @@ function mulberry32(seed) {
 // Echivalentul JS din model.generate(): temperature -> top-k -> softmax -> extragere aleatorie
 function sample(logits, temperature, topK, rand) {
   const scaled = Array.from(logits, (x) => x / temperature);
-  // Pragul top-k = al K-lea cel mai mare scor; tot ce e sub prag devine imposibil
   const threshold = [...scaled].sort((a, b) => b - a)[Math.min(topK, scaled.length) - 1];
-  const max = Math.max(...scaled);  // scădem maximul -> exp() nu dă overflow
+  const max = Math.max(...scaled);
   const probs = scaled.map((x) => (x >= threshold ? Math.exp(x - max) : 0));
   const sum = probs.reduce((a, b) => a + b, 0);
 
@@ -134,45 +137,99 @@ function sample(logits, temperature, topK, rand) {
     r -= probs[i];
     if (r <= 0) return i;
   }
-  return last;  // protecție la erori de rotunjire
+  return last;
 }
 
-// Rulează modelul o dată și returnează ID-ul următorului caracter
+// Rulează modelul activ o dată și returnează ID-ul următorului caracter
 async function nextToken(ids, temperature, topK, rand) {
+  const { meta, session } = current;
   const T = meta.block_size;
-  const context = ids.slice(-T);  // doar ultimele block_size caractere (limita de context)
+  const context = ids.slice(-T);
   const L = context.length;
 
-  // Padding cu 0 DUPĂ prompt (modelul a fost exportat cu formă fixă [1, T]).
-  // Masca cauzală garantează că zerourile de după nu influențează poziția L-1.
+  // Padding cu 0 DUPĂ prompt; masca cauzală face ca zerourile să nu influențeze poziția L-1
   const input = new BigInt64Array(T);
   context.forEach((id, i) => (input[i] = BigInt(id)));
 
   const feeds = { [session.inputNames[0]]: new ort.Tensor("int64", input, [1, T]) };
   const results = await session.run(feeds);
-  const logits = results[session.outputNames[0]].data;  // formă [1, T, V], aplatizat
+  const logits = results[session.outputNames[0]].data;
 
   const V = meta.chars.length;
-  const row = logits.subarray((L - 1) * V, L * V);  // scorurile pentru ultimul caracter real
-  return sample(row, temperature, topK, rand);
+  return sample(logits.subarray((L - 1) * V, L * V), temperature, topK, rand);
 }
 
-function setRunning(running) {
-  $("generate").disabled = running;
-  $("stop").disabled = !running;
-  document.querySelectorAll(".examples button").forEach((b) => (b.disabled = running));
+function setRunning(isRunning) {
+  running = isRunning;
+  $("generate").disabled = isRunning || !current;
+  $("stop").disabled = !isRunning;
+  document.querySelectorAll(".examples button, .tabs button").forEach((b) => (b.disabled = isRunning));
+}
+
+function renderExamples(examples) {
+  const box = $("examples");
+  box.innerHTML = "";
+  for (const ex of examples) {
+    const b = document.createElement("button");
+    b.textContent = ex;
+    b.addEventListener("click", () => {
+      $("prompt").value = ex;
+      generate();
+    });
+    box.appendChild(b);
+  }
+}
+
+async function selectDataset(name) {
+  if (running) return;
+  current = null;
+  $("generate").disabled = true;
+  document.querySelectorAll(".tabs button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.name === name)
+  );
+
+  const meta = metas[name];
+  $("status").classList.remove("error");
+  $("status").textContent = `Loading the ${meta.label} model…`;
+
+  try {
+    if (!sessions[name]) {
+      sessions[name] = await ort.InferenceSession.create(`models/${name}/model.onnx`);
+    }
+  } catch (e) {
+    $("status").classList.add("error");
+    $("status").textContent = "Failed to load the model: " + e.message;
+    return;
+  }
+
+  current = { name, meta, session: sessions[name], stoi: new Map(meta.chars.map((ch, i) => [ch, i])) };
+
+  // Top-k nu poate depăși mărimea vocabularului acestui dataset
+  $("topk").max = meta.chars.length;
+  if (+$("topk").value > meta.chars.length) {
+    $("topk").value = meta.chars.length;
+    $("topk-val").textContent = meta.chars.length;
+  }
+
+  renderExamples(meta.examples);
+  $("prompt").value = meta.examples[0] || "";
+  $("output").textContent = "";
+  $("status").textContent =
+    `${meta.description} · ${(meta.params / 1e6).toFixed(2)}M parameters · ` +
+    `validation loss ${meta.val_loss} · running locally in your browser`;
+  $("generate").disabled = false;
 }
 
 async function generate() {
+  if (!current || running) return;
   const out = $("output");
   out.classList.remove("error");
   const prompt = $("prompt").value || "\n";
 
-  // Promptul poate conține doar caractere văzute la antrenare
-  const unknown = [...new Set(prompt)].filter((ch) => !stoi.has(ch));
+  const unknown = [...new Set(prompt)].filter((ch) => !current.stoi.has(ch));
   if (unknown.length) {
     out.classList.add("error");
-    out.textContent = `Unknown characters (not in the training data): ${unknown.join(" ")}`;
+    out.textContent = `Unknown characters for the ${current.meta.label} model: ${unknown.join(" ")}`;
     return;
   }
 
@@ -182,7 +239,7 @@ async function generate() {
   const temperature = +$("temperature").value;
   const topK = +$("topk").value;
 
-  const ids = [...prompt].map((ch) => stoi.get(ch));
+  const ids = [...prompt].map((ch) => current.stoi.get(ch));
   let text = prompt;
   out.textContent = text;
   stopRequested = false;
@@ -192,10 +249,10 @@ async function generate() {
     for (let i = 0; i < n && !stopRequested; i++) {
       const id = await nextToken(ids, temperature, topK, rand);
       ids.push(id);
-      text += meta.chars[id];
+      text += current.meta.chars[id];
       if (i % 5 === 0) {
         out.textContent = text;
-        await new Promise((r) => setTimeout(r, 0));  // lasă browserul să redeseneze pagina
+        await new Promise((r) => setTimeout(r, 0));
       }
     }
     out.textContent = text;
@@ -208,30 +265,38 @@ async function generate() {
 }
 
 async function init() {
-  try {
-    meta = await (await fetch("meta.json")).json();
-    stoi = new Map(meta.chars.map((ch, i) => [ch, i]));  // caracter -> ID, ca în tokenizer.py
-    $("topk").max = meta.chars.length;
-    session = await ort.InferenceSession.create("model.onnx");
-    $("status").textContent =
-      `Model loaded · ${(meta.params / 1e6).toFixed(2)}M parameters · ` +
-      `validation loss ${meta.val_loss} · running locally in your browser`;
-    $("generate").disabled = false;
-  } catch (e) {
-    $("status").classList.add("error");
-    $("status").textContent = "Failed to load the model: " + e.message;
+  // Descoperă ce modele au fost exportate (fiecare are un meta.json)
+  for (const name of DATASETS) {
+    try {
+      const response = await fetch(`models/${name}/meta.json`);
+      if (response.ok) metas[name] = await response.json();
+    } catch (e) {
+      // dataset neexportat: îl ignorăm
+    }
   }
+
+  const names = Object.keys(metas);
+  if (!names.length) {
+    $("status").classList.add("error");
+    $("status").textContent = "No models found. Run: python export_onnx.py";
+    return;
+  }
+
+  const tabs = $("tabs");
+  for (const name of names) {
+    const b = document.createElement("button");
+    b.textContent = metas[name].label;
+    b.dataset.name = name;
+    b.addEventListener("click", () => selectDataset(name));
+    tabs.appendChild(b);
+  }
+  tabs.hidden = names.length < 2;  // un singur model -> fără taburi
+
+  await selectDataset(names[0]);
 }
 
 $("generate").addEventListener("click", generate);
 $("stop").addEventListener("click", () => (stopRequested = true));
-document.querySelectorAll(".examples button").forEach((b) =>
-  b.addEventListener("click", () => {
-    $("prompt").value = b.dataset.prompt;
-    generate();
-  })
-);
-
 init();
 </script>
 </body>
