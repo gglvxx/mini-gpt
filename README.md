@@ -1,9 +1,8 @@
 # Mini-GPT
 
-A character-level GPT language model built from scratch in PyTorch.
-It is trained on Shakespeare's works and generates new text in the same style.
+A character-level GPT language model built from scratch in PyTorch, trained on two corpora: **Shakespeare** and **classic Romanian literature** (Eminescu, Caragiale, Slavici).
 
-**▶ Try it online: [gglvxx.github.io/mini-gpt](https://gglvxx.github.io/mini-gpt/)** (runs entirely in your browser)
+**▶ Try it online: [gglvxx.github.io/mini-gpt](https://gglvxx.github.io/mini-gpt/)** (runs entirely in your browser, in English and Romanian)
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-5b4bdb)](https://gglvxx.github.io/mini-gpt/)
 ![Tests](https://github.com/gglvxx/mini-gpt/actions/workflows/tests.yml/badge.svg)
@@ -13,36 +12,59 @@ It is trained on Shakespeare's works and generates new text in the same style.
 
 ## How it works (in plain English)
 
-**Mini-GPT is a program that taught itself to write in Shakespeare's style, one letter at a time.** Nobody explained English grammar or what a play looks like. It figured everything out from examples.
+**Mini-GPT is a program that taught itself to write in the style of the texts it read, one letter at a time.** Nobody explained grammar or what a play or a poem looks like. It figured everything out from examples. One model learned from Shakespeare, a second one from classic Romanian writers.
 
 **What it does.** Think of the word suggestions on your phone keyboard, but at the level of single letters, in a loop:
 
-1. It receives the start of a text, for example `ROMEO:`
+1. It receives the start of a text, for example `ROMEO:` or `A fost odată`
 2. It guesses the most likely **next letter**
 3. It adds that letter to the text and guesses again
 4. Repeated a few hundred times, this produces a full passage
 
-**How it learned.** It read about 1 million characters of Shakespeare and played one game thousands of times: *"I hide the next letter, you guess it."* After every mistake, it slightly adjusted its 820,000 internal numbers (parameters). At first it guessed completely at random. By the end, instead of hesitating between all 65 possible characters, it hesitates between about 5 on average.
+**How it learned.** It read about a million characters of text and played one game thousands of times: *"I hide the next letter, you guess it."* After every mistake, it slightly adjusted its 820,000 internal numbers (parameters). At first it guessed completely at random. By the end, instead of hesitating between all possible characters, it hesitates between only a handful on average.
 
 **What it knows, and what it doesn't.**
-- ✅ **Form:** character names in capitals followed by `:`, dialogue on separate lines, real English words, punctuation
-- ❌ **Meaning:** the sentences don't make sense. Like a parrot that has listened to thousands of plays, it imitates the sound perfectly without understanding the story.
+- ✅ **Form:** dialogue layout, verse lines, real words, punctuation, Romanian diacritics
+- ❌ **Meaning:** the sentences don't make sense. Like a parrot that has listened to thousands of books, it imitates the sound perfectly without understanding the story.
 
-**How it relates to ChatGPT.** It uses the same core technology, the **Transformer** architecture, and the same principle: *predict the next piece of text*. The difference is scale: this model has 0.82 million parameters and was trained on 1 MB of text, while large models like GPT-3 have 175 billion parameters, read a large part of the internet, and receive extra training to hold conversations.
+**How it relates to ChatGPT.** It uses the same core technology, the **Transformer** architecture, and the same principle: *predict the next piece of text*. The difference is scale: this model has 0.82 million parameters and was trained on about 1 MB of text, while large models like GPT-3 have 175 billion parameters, read a large part of the internet, and receive extra training to hold conversations.
 
-**Try it yourself.** Open the [live demo](https://gglvxx.github.io/mini-gpt/), type a character name such as `JULIET:`, and press **Generate**. Keep in mind it is not a chatbot: if you ask a question, it won't answer it, it will simply continue the text as if it were a line from a play.
+**Try it yourself.** Open the [live demo](https://gglvxx.github.io/mini-gpt/), pick **Shakespeare** or **Română**, and press **Generate**. Keep in mind it is not a chatbot: if you ask a question, it won't answer it, it will simply continue the text.
 
 ## Features
 
 - **Decoder-only Transformer** implemented from scratch: causal multi-head self-attention, feed-forward layers, residual connections, LayerNorm
+- **Two datasets**: Tiny Shakespeare and a custom Romanian literature corpus, selected with one environment variable
+- **Text cleaning pipeline** for raw Project Gutenberg sources: boilerplate removal, diacritics normalization, footnote and markup stripping, rare-character filtering
 - **Character-level tokenizer** with encode/decode roundtrip
 - **Hardware-aware config**: automatically uses a larger model when a CUDA GPU is available
 - **Training loop** with train/val evaluation, gradient clipping and best-checkpoint saving
-- **Loss tracking** with an automatically generated training curve
+- **Loss tracking** with automatically generated training curves
 - **Streaming text generation** with temperature and top-k sampling
-- **In-browser inference**: the model is exported to ONNX and runs client-side with ONNX Runtime Web, hosted for free on GitHub Pages, no server needed
+- **In-browser inference**: both models are exported to ONNX and run client-side with ONNX Runtime Web, hosted for free on GitHub Pages, no server needed
 - **Local web app** built with Gradio
-- **Unit tests** for the tokenizer, dataset and model (including a causal-mask test), run automatically with GitHub Actions
+- **Unit tests** for the tokenizer, dataset, model and text cleaning, run automatically with GitHub Actions
+
+## Datasets
+
+| | Shakespeare | Romanian literature |
+|---|---|---|
+| Source | [Tiny Shakespeare](https://github.com/karpathy/char-rnn) | [Project Gutenberg](https://www.gutenberg.org/browse/languages/ro) (public domain) |
+| Content | Plays | Eminescu *Poezii*, Caragiale *Nuvele*, Slavici *Povești* |
+| Size | 1,115,394 characters | 1,368,843 characters |
+| Vocabulary | 65 characters | 90 characters |
+
+### Cleaning the Romanian corpus
+
+Raw Gutenberg files are not usable as-is. [`src/cleaning.py`](src/cleaning.py) applies:
+
+1. **Boilerplate removal**: strips the Project Gutenberg license header and footer, keeping only the literary text
+2. **Diacritics normalization**: old texts often use the incorrect cedilla forms `ş ţ`; they are converted to the correct comma-below forms `ș ț`, so the model does not learn two different letters for the same sound
+3. **Markup stripping**: removes `_italic_` markers, `[Illustration]` tags and footnote references like `[12]`
+4. **Whitespace normalization**: Windows line endings, trailing spaces, repeated blank lines
+5. **Rare-character filtering**: drops characters seen fewer than 20 times, which the model cannot learn and which only inflate the vocabulary
+
+Each step is covered by unit tests in [`tests/test_cleaning.py`](tests/test_cleaning.py).
 
 ## Architecture
 
@@ -68,19 +90,21 @@ Final LayerNorm → Linear → Logits (next-character probabilities)
 mini-gpt/
 ├── .github/workflows/   # CI: runs the tests on every push
 ├── src/
-│   ├── config.py        # Hyperparameters and paths
+│   ├── config.py        # Hyperparameters, paths and dataset selection
+│   ├── cleaning.py      # Text cleaning for Project Gutenberg sources
 │   ├── tokenizer.py     # Character-level tokenizer
 │   ├── dataset.py       # Train/val split and batching
 │   └── model.py         # Transformer architecture
 ├── tests/               # Unit tests (pytest)
-├── docs/                # In-browser demo served by GitHub Pages (HTML + ONNX model)
+├── docs/                # In-browser demo served by GitHub Pages
+│   └── models/          # One ONNX model + metadata per dataset
 ├── assets/              # Images used in this README
-├── data/                # Dataset (downloaded, not tracked)
-├── checkpoints/         # Trained models and loss history (not tracked)
-├── prepare_data.py      # Downloads the dataset
+├── data/                # Datasets (downloaded, not tracked)
+├── checkpoints/         # One folder per dataset: model + loss history (not tracked)
+├── prepare_data.py      # Downloads and cleans a dataset
 ├── train.py             # Trains the model
 ├── generate.py          # Generates text from the command line
-├── export_onnx.py       # Exports the model to ONNX for the browser demo
+├── export_onnx.py       # Exports all trained models for the browser demo
 ├── app.py               # Local web interface (Gradio)
 ├── plot_loss.py         # Plots the training curve
 ├── pytest.ini
@@ -105,25 +129,29 @@ pip install -r requirements.txt
 
 ## Usage
 
+Every script works on the dataset set by `MINIGPT_DATASET` (`shakespeare` by default, or `romanian`).
+
 ```bash
-# 1. Download the Tiny Shakespeare dataset (~1 MB)
+# 1. Download (and clean) a dataset
 python prepare_data.py
+MINIGPT_DATASET=romanian python prepare_data.py
 
 # 2. Train the model
 python train.py                    # full training
 python train.py --max-iters 300    # quick test run
+MINIGPT_DATASET=romanian python train.py
 
 # 3. Plot the loss curve
 python plot_loss.py
 
 # 4. Generate text from the command line
 python generate.py --prompt "ROMEO:" --tokens 300
-python generate.py --temperature 0.5 --top-k 20 --seed 42
+MINIGPT_DATASET=romanian python generate.py --prompt "A fost odată" --temperature 0.7
 
 # 5. Launch the local web interface
 python app.py
 
-# 6. Export the model for the browser demo, then preview it locally
+# 6. Export all trained models for the browser demo, then preview it locally
 python export_onnx.py
 python -m http.server 8000 --directory docs   # open http://localhost:8000
 
@@ -147,9 +175,9 @@ pytest -v
 
 **[gglvxx.github.io/mini-gpt](https://gglvxx.github.io/mini-gpt/)**
 
-The trained model is exported to ONNX (`export_onnx.py`) and executed directly in the visitor's browser with ONNX Runtime Web. Sampling (temperature, top-k) is reimplemented in JavaScript. No backend, no GPU, no cost.
+Both trained models are exported to ONNX (`export_onnx.py`) and executed directly in the visitor's browser with ONNX Runtime Web. Each model is downloaded only when its tab is selected. Sampling (temperature, top-k) is reimplemented in JavaScript. No backend, no GPU, no cost.
 
-To keep the export simple and robust, the model uses a fixed input shape of `[1, 128]`: shorter prompts are right-padded, and the causal mask guarantees the padding never affects the predictions.
+To keep the export simple and robust, the models use a fixed input shape of `[1, 128]`: shorter prompts are right-padded, and the causal mask guarantees the padding never affects the predictions.
 
 ### Gradio (local)
 
@@ -162,28 +190,55 @@ python app.py
 
 ## Results
 
-| Setting | Value |
-|---|---|
-| Hardware | CPU (Intel, Lenovo IdeaPad Slim 3) |
-| Parameters | 0.82M |
-| Layers / Heads / Embedding | 4 / 4 / 128 |
-| Context length | 128 characters |
-| Training steps | 3,000 |
-| **Validation loss** | **1.597** (random baseline: 4.17) |
+Same architecture and hyperparameters for both datasets, trained on CPU (Intel, Lenovo IdeaPad Slim 3).
 
-![Loss curve](assets/loss_curve.png)
+| | Shakespeare | Romanian literature |
+|---|---|---|
+| Parameters | 0.82M | 0.82M |
+| Layers / Heads / Embedding | 4 / 4 / 128 | 4 / 4 / 128 |
+| Context length | 128 characters | 128 characters |
+| Training steps | 3,000 | 3,000 |
+| Random-guess baseline | 4.17 | 4.50 |
+| **Validation loss** | **1.597** | **1.811** |
+
+Validation losses are **not directly comparable** across datasets: the languages, vocabularies and writing styles differ. Each model should be judged against its own random-guess baseline.
+
+| Shakespeare | Romanian literature |
+|---|---|
+| ![Loss curve Shakespeare](assets/loss_curve.png) | ![Loss curve Romanian](assets/loss_curve_romanian.png) |
 
 ### Sample output
 
+**Shakespeare** (prompt `ROMEO:`, seed 42):
+
 ```
-PASTE YOUR GENERATED TEXT HERE
+ROMEO:
+As I have stand not die the day, on the better for yet
+a present make a dream a deceive them,
+And it well their
+cersier fame! O denial noble leave,
+Would and for the presence for the both charge:
+And so he said yet us a passion's life was came
+Them between hang were could to sounder I speak and my
 ```
 
-The model learns the **form** of the text (dialogue format, character names, spelling and punctuation), not its meaning. This is expected at this scale.
+**Romanian literature** (prompt `A fost odată`, seed 42):
+
+```
+A fost odată, că s’au curgeaua săută d’l de dorminte am a venițofat cu unde
+cel de breu se duce să răspunse și pe unde aflorilor…
+
+– L’a încunoastea său foc pe pe cuțită In mijlocata!…
+
+– Nu să fie nimic sarfește de prefecioară, cum că alta nu stau în puternicită si
+curtească: încet bunetelele într’un tărăt alt
+```
+
+Both models learn the **form** of the text (dialogue layout, verse, spelling, punctuation, diacritics), not its meaning. This is expected at this scale.
 
 ## Experiments
 
-| Change | Best val loss | Kept? |
+| Change | Best val loss (Shakespeare) | Kept? |
 |---|---|---|
 | Baseline (constant LR 1e-3) | **1.597** | ✅ |
 | Cosine LR schedule with warmup (peak 1e-3) | 1.609 | ❌ |
@@ -198,7 +253,7 @@ All hyperparameters live in [`src/config.py`](src/config.py). A small preset is 
 
 - [Attention Is All You Need](https://arxiv.org/abs/1706.03762) (Vaswani et al., 2017)
 - Andrej Karpathy's [nanoGPT](https://github.com/karpathy/nanoGPT) and the *Let's build GPT* lecture
-- Dataset: [Tiny Shakespeare](https://github.com/karpathy/char-rnn)
+- Datasets: [Tiny Shakespeare](https://github.com/karpathy/char-rnn) and [Project Gutenberg](https://www.gutenberg.org/)
 - [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) for in-browser inference
 
 ## License
